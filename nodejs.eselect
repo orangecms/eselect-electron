@@ -1,18 +1,19 @@
-# Copyright 1999-2016 Gentoo Foundation
+# Copyright 1999-2017 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
 # $Id: $
 
 # Based on postgresql.eselect by Aaron W. Swenson
+# Based on electron.eselect by Elvis
 
 inherit config multilib
 
-DESCRIPTION="Manage default Electron symlinks."
-MAINTAINER="elvis@magic.io"
+DESCRIPTION="Manage default Node.js symlinks."
+#MAINTAINER=""
 VERSION="1.0.0"
 
 # Global Data
 B_PATH="${EROOT%/}/usr"
-E_PATH="${EROOT%/}/etc/eselect/electron"
+E_PATH="${EROOT%/}/etc/eselect/nodejs"
 
 active_slot() {
 	if [[ -r ${E_PATH}/active && -n ${E_PATH}/active ]] ; then
@@ -25,13 +26,13 @@ active_slot() {
 lib_dir() {
 	local lib_list=$(list_libdirs)
 	if [[ ${lib_list} =~ .*lib64.* && \
-		-n $(ls -d ${B_PATH}/lib64/electron-*/lib64 2> /dev/null) ]] ; then
+		-n $(ls -d ${B_PATH}/lib64/nodejs/* 2> /dev/null) ]] ; then
 		echo "lib64"
 	elif [[ ${lib_list} =~ .*lib32.* && \
-		-n $(ls -d ${B_PATH}/lib32/electron-*/lib32 2> /dev/null) ]] ; then
+		-n $(ls -d ${B_PATH}/lib32/nodejs/* 2> /dev/null) ]] ; then
 		echo "lib32"
 	elif [[ ${lib_list} =~ .*libx32.* && \
-		-n $(ls -d ${B_PATH}/libx32/electron-*/libx32 2> /dev/null) ]] ; then
+		-n $(ls -d ${B_PATH}/libx32/nodejs/* 2> /dev/null) ]] ; then
 		echo "libx32"
 	else
 		echo "lib"
@@ -40,10 +41,10 @@ lib_dir() {
 
 ### Linker Function ###
 # Takes four arguments:
-#   - Full source path (e.g. /usr/lib/postgresql-9.0/lib)
+#   - Full source path (e.g. /usr/lib/nodejs/8.0.0)
 #   - Pattern to search for
 #   - Full target directory path (e.g. /usr/bin)
-#   - Suffix (Optional) (e.g 84 to make /usr/bin/psql84)
+#   - Suffix (Optional) (e.g 80 to make /usr/bin/node80)
 linker() {
 	local source_dir=$1
 	local pattern=$2
@@ -79,7 +80,7 @@ linker() {
 
 ### Unlinker Function ###
 # Takes one argument:
-#   - Full path to active links file (e.g. /etc/eselect/postgresql/active.links)
+#   - Full path to active links file (e.g. /etc/eselect/nodejs/active.links)
 unlinker() {
 	local active_link_file=$1
 	if [[ -r ${active_link_file} ]] ; then
@@ -101,13 +102,13 @@ get_slots() {
 	local slot
 	local found_slots
 
-	for slot in $(find "${B_PATH}/$(lib_dir)/" -maxdepth 1 -type d \
-		-regex '.*electron-[0-9][0-9]*\.[0-9][0-9]*' | \
-		sed -re 's#.*([0-9]+\.[0-9]+)$#\1#' | sort -n)
+	for slot in $(find "${B_PATH}/$(lib_dir)/nodejs/" -maxdepth 1 -type d \
+		-regex '.*[0-9]+\.[0-9]+\.[0-9]+' | \
+		sed -re 's#.*([0-9]+\.[0-9]+\.[0-9]+)$#\1#' | sort -n)
 	do
-		# Check that electron binary exists for this slot, otherwise we have
+		# Check that nodejs binary exists for this slot, otherwise we have
 		# a false positive.
-		[[ -x "${B_PATH}/$(lib_dir)/electron-${slot}/electron" ]] && \
+		[[ -x "${B_PATH}/$(lib_dir)/nodejs/${slot}/bin/node" ]] && \
 			found_slots+=( ${slot} )
 	done
 
@@ -116,23 +117,23 @@ get_slots() {
 
 ### List Action ###
 describe_list() {
-	echo "List available Electron slots."
+	echo "List available Node.js slots."
 }
 
 do_list() {
-	write_list_start "Available Electron Slots"
+	write_list_start "Available Node.js Slots"
 
 	if $(is_output_mode brief) ; then
 		echo $(get_slots)
 	else
 		local slot
 		for slot in $(get_slots) ; do
-			local electron_ebuilds=""
+			local nodejs_ebuilds=""
 
 			local src
-            for src in "${E_PATH}"/slots/${slot}/base ; do
-                [[ -r ${src} ]] && source "${src}"
-            done
+			for src in "${E_PATH}"/slots/${slot}/base ; do
+				[[ -r ${src} ]] && source "${src}"
+			done
 
 			case "${slot}" in
 				"$(active_slot)" ) write_kv_list_entry \
@@ -155,16 +156,17 @@ do_show() {
 
 ### Set Action ###
 describe_set() {
-	echo "Create symbolic links for Electron libraries and applications."
+	echo "Create symbolic links for Node.js libraries and applications."
 }
 
 do_set() {
 	local SLOT=$1
-	if [[ ! -d ${B_PATH}/$(lib_dir)/electron-${SLOT} ]] ; then
+	local SLOT_DIR=${B_PATH}/$(lib_dir)/nodejs/${SLOT}
+	if [[ ! -d $SLOT_DIR ]] ; then
 		die -q "Not a valid slot."
 	fi
 
-	echo "Setting electron-${SLOT} as the default Electron installation..."
+	echo "Setting nodejs-${SLOT} as the default Node.js installation..."
 
 	# Remove the active links to start a fresh list
 	echo -ne "\tRemoving old links..."
@@ -173,35 +175,43 @@ do_set() {
 
 	echo -ne "\tGenerating new links..."
 	# Sources and targets for header files
-	local sources=(
-		"${B_PATH}"/include/electron-${SLOT}
-	)
-	local targets=(
-		"${B_PATH}"/include/electron
-	)
+#	local sources=(
+#		"${B_PATH}"/include/nodejs-${SLOT}
+#	)
+#	local targets=(
+#		"${B_PATH}"/include/nodejs
+#	)
+#
+#	# The linker function cannot accomadate this special purpose.
+#	local rel_source
+#	local i
+#	for (( i=0; $i < ${#sources[@]}; i++ )) ; do
+#		# Remove target before creating the symlink
+#		[[ -h ${targets[$i]} ]] && rm -f "${targets[$i]}"
+#
+#		# Check if link_target still exists
+#		[[ -e ${targets[$i]} ]] && \
+#			die -q "The target '${targets[$i]}' exists and could not be removed!"
+#
+#		# Create relative links so that they work both here and inside the new
+#		# root if $ROOT is not "/"
+#		rel_source=$(relative_name "${sources[$i]}" "$(dirname "${targets[$i]}")")
+#
+#		ln -s "$rel_source" "${targets[$i]}" || die -q "Unable to create link!"
+#		echo "${targets[$i]##${ROOT%/}/}" >> "${E_PATH}"/active.links
+#	done
 
-	# The linker function cannot accomadate this special purpose.
-	local rel_source
-	local i
-	for (( i=0; $i < ${#sources[@]}; i++ )) ; do
-		# Remove target before creating the symlink
-		[[ -h ${targets[$i]} ]] && rm -f "${targets[$i]}"
-
-		# Check if link_target still exists
-		[[ -e ${targets[$i]} ]] && \
-			die -q "The target '${targets[$i]}' exists and could not be removed!"
-
-		# Create relative links so that they work both here and inside the new
-		# root if $ROOT is not "/"
-		rel_source=$(relative_name "${sources[$i]}" "$(dirname "${targets[$i]}")")
-
-		ln -s "$rel_source" "${targets[$i]}" || die -q "Unable to create link!"
-		echo "${targets[$i]##${ROOT%/}/}" >> "${E_PATH}"/active.links
-	done
-
-	# Link binary to /usr/bin/
-	ln -s "electron-${SLOT}" "/usr/bin/electron"
-    echo "${B_PATH##${ROOT%/}/}/bin/electron" >> "${E_PATH}/active.links"
+	# Link binaries to /usr/bin
+	local BIN_DIR="/usr/bin"
+#	linker $SLOT_DIR "bin\/node" "${BIN_DIR}" "-${SLOT}"
+#	linker $SLOT_DIR "lib/node_modules/npm/bin/node-gyp-bin/node-gyp" "${BIN_DIR}" "-${SLOT}"
+	ln -s "../lib/nodejs/${SLOT}/bin/node" "${BIN_DIR}/node" || \
+		die -q "Unable to create link!"
+	ln -s "../lib/nodejs/${SLOT}/lib/node_modules/npm/bin/node-gyp-bin/node-gyp" \
+		"${BIN_DIR}/node-gyp" || \
+		die -q "Unable to create link!"
+	echo "${B_PATH##${ROOT%/}/}/bin/node"     >> "${E_PATH}/active.links"
+	echo "${B_PATH##${ROOT%/}/}/bin/node-gyp" >> "${E_PATH}/active.links"
 
 	echo ${SLOT} > "${E_PATH}/active"
 	echo "done."
