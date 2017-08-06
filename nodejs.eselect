@@ -9,7 +9,7 @@ inherit config multilib
 
 DESCRIPTION="Manage default Node.js symlinks."
 #MAINTAINER=""
-VERSION="1.0.0"
+VERSION="1.0.1"
 
 # Global Data
 B_PATH="${EROOT%/}/usr"
@@ -201,17 +201,22 @@ do_set() {
 #		echo "${targets[$i]##${ROOT%/}/}" >> "${E_PATH}"/active.links
 #	done
 
-	# Link binaries to /usr/bin
+	# Link binaries and headers to /usr
 	local BIN_DIR="/usr/bin"
+	local INCLUDE_DIR="/usr/include"
 #	linker $SLOT_DIR "bin\/node" "${BIN_DIR}" "-${SLOT}"
 #	linker $SLOT_DIR "lib/node_modules/npm/bin/node-gyp-bin/node-gyp" "${BIN_DIR}" "-${SLOT}"
 	ln -s "../lib/nodejs/${SLOT}/bin/node" "${BIN_DIR}/node" || \
-		die -q "Unable to create link!"
+		die -q "Unable to create symlink for node!"
 	ln -s "../lib/nodejs/${SLOT}/lib/node_modules/npm/bin/node-gyp-bin/node-gyp" \
 		"${BIN_DIR}/node-gyp" || \
-		die -q "Unable to create link!"
+		die -q "Unable to create symlink for node-gyp!"
+	ln -s "../lib/nodejs/${SLOT}/include/node" \
+		"${INCLUDE_DIR}/node" || \
+		die -q "Unable to create symlink for headers!"
 	echo "${B_PATH##${ROOT%/}/}/bin/node"     >> "${E_PATH}/active.links"
 	echo "${B_PATH##${ROOT%/}/}/bin/node-gyp" >> "${E_PATH}/active.links"
+	echo "${B_PATH##${ROOT%/}/}/include/node" >> "${E_PATH}/active.links"
 
 	echo ${SLOT} > "${E_PATH}/active"
 	echo "done."
